@@ -56,7 +56,7 @@ if user_query:
     st.chat_message("user").write(user_query)
     with st.chat_message("assistant"):
         response = client.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": user_query}],
             max_tokens=500
         )
