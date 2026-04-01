@@ -1,66 +1,72 @@
 import streamlit as st
 from groq import Groq
-from gtts import gTTS
 import base64
-import os
-import re
 
-# 1. Matrix Theme UI
+# 1. Page Configuration
 st.set_page_config(page_title="Matrix AI", page_icon="🤖", layout="wide")
-st.markdown("""
-    <style>
-    .stApp { background-color: #0b0d11; color: #00ff41; }
-    audio { display: none; }
-    </style>
-    """, unsafe_allow_html=True)
+st.title("🤖 Matrix AI: Syed Aves Edition")
+st.markdown("---")
 
-# API Key Check
-if "GROQ_API_KEY" not in st.secrets:
-    st.error("Bhai, Streamlit Secrets mein 'GROQ_API_KEY' set karein!")
+# 2. Connection to Groq (Using Secrets)
+if "GROQ_API_KEY" in st.secrets:
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+else:
+    st.error("Please add GROQ_API_KEY in Streamlit Secrets!")
     st.stop()
 
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# 3. IDENTITY LOCK (Syed Aves Name + Emojis)
+system_prompt = (
+    "You are Matrix AI, a high-end assistant created by Syed Aves. "
+    "Introduce yourself as 'Syed Aves's Matrix AI' at the start of every chat. "
+    "Always use plenty of emojis (🚀, 🦾, ✨) and professional Hinglish. 🦾"
+)
 
-# 2. Voice Function
-def matrix_speak(text):
-    clean_text = re.sub(r'[^\w\s,.?]', '', text)
-    tts = gTTS(text=clean_text, lang='hi', slow=False)
-    tts.save("voice.mp3")
-    with open("voice.mp3", "rb") as f:
-        data = f.read()
-    b64 = base64.b64encode(data).decode()
-    st.markdown(f'<audio src="data:audio/mp3;base64,{b64}" autoplay></audio>', unsafe_allow_html=True)
+# 4. IMAGE UPLOAD SECTION (Sidebar)
+with st.sidebar:
+    st.header("Matrix Settings")
+    uploaded_file = st.file_uploader("🖼️ Photo upload karein", type=["jpg", "png", "jpeg"])
+    if st.button("Clear Chat 🗑️"):
+        st.session_state.messages = []
+        st.rerun()
 
-# 3. UI & Chat
-st.title("🤖 Matrix: Voice & Vision")
-voice_input = st.audio_input("🎤 Bol kar puchiye")
-text_input = st.chat_input("⌨️ Type karein")
+# 5. Chat History Management
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-user_query = None
-should_speak = False
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if voice_input:
-    with st.spinner("Matrix sun raha hai..."):
-        transcription = client.audio.transcriptions.create(
-            file=("audio.wav", voice_input.read()),
-            model="whisper-large-v3"
-        )
-        user_query = transcription.text
-        should_speak = True
-
-if text_input:
-    user_query = text_input
-    should_speak = False
+# 6. User Input & Logic
+user_query = st.chat_input("Syed Aves, main aapki kya madad kar sakta hoon?")
 
 if user_query:
-    st.chat_message("user").write(user_query)
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    with st.chat_message("user"):
+        st.markdown(user_query)
+
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    if uploaded_file:
+        image_data = base64.b64encode(uploaded_file.read()).decode("utf-8")
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_query},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+            ]
+        })
+        model_id = "llama-3.2-11b-vision-preview" 
+    else:
+        messages.append({"role": "user", "content": user_query})
+        model_id = "llama-3.3-70b-versatile"
+
+    # Final Response Generation
     with st.chat_message("assistant"):
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": user_query}],
-            max_tokens=500
-        )
-        reply = response.choices[0].message.content
-        st.write(reply)
-        if should_speak:
-            matrix_speak(reply)
+        try:
+            response = client.chat.completions.create(model=model_id, messages=messages)
+            full_response = response.choices[0].message.content
+            st.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+        except Exception as e:
+            st.error(f"Error: {e}")
